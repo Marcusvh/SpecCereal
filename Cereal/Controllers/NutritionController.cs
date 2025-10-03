@@ -67,9 +67,9 @@ namespace Cereal.Controllers
         [ProducesResponseType(StatusCodes.Status204NoContent)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         [ProducesResponseType(StatusCodes.Status500InternalServerError)]
-        public IActionResult GetFilter([FromQuery] string value, string category)
+        public IActionResult GetFilter([FromQuery] string? category, string? value, string sorting)
         {
-            List<Nutrition> products = parserManager.GetFilteredProducts(category, value);
+            List<Nutrition> products = parserManager.GetFilteredProducts(category, value, sorting);
             if (products == null)
             {
                 return NotFound();
@@ -81,26 +81,29 @@ namespace Cereal.Controllers
             return Ok(products);
         }
         [HttpGet("{id}/image")]
+        [ProducesResponseType(typeof(FileResult), StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        [ProducesResponseType(StatusCodes.Status500InternalServerError)]
         public IActionResult GetProductImage(int id)
         {
             Nutrition product = parserManager.GetSingleProduct(id);
             if (product == null || string.IsNullOrEmpty(product.ImagePath))
                 return NotFound();
 
-            string imagePath = Path.Combine("wwwroot", product.ImagePath);
-            imagePath = imagePath.Replace('/', Path.DirectorySeparatorChar);
-            if (!System.IO.File.Exists(imagePath))
+
+            product.ImagePath = product.ImagePath.Replace('/', Path.DirectorySeparatorChar);
+            if (!System.IO.File.Exists(product.ImagePath))
                 return NotFound();
 
-            byte[] imageBytes = System.IO.File.ReadAllBytes(imagePath);
-            FileInfo fileInfo = new FileInfo(imagePath);
+            byte[] imageBytes = System.IO.File.ReadAllBytes(product.ImagePath); // Read the image file into a byte array
+            FileInfo fileInfo = new FileInfo(product.ImagePath);
             
             string contentType = $"image/{fileInfo.Extension}"; 
 
-            return File(imageBytes, contentType);
+            return File(imageBytes, contentType); // Serve the image file with the correct content type
         }
         [HttpGet("setup")]
-        public void imgPathSetup() // Call this once to setup image paths in the database.
+        public void imgPathSetup() // if there is no ImagePath. Call this once to setup image paths in the database.
         {
             parserManager.ImagePathSetup();
         }

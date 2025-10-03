@@ -28,5 +28,11 @@ namespace Cereal.Helpers
             };
             return nutritionMapped;
         }
+        public static string NormalizeImagePathString(string input)
+        {
+            if (string.IsNullOrWhiteSpace(input))
+                return string.Empty;
+            return input.Replace(" ", "").Replace("'", "").Replace(",", "").Replace(".", "").ToLower();
+        }
     }
 }

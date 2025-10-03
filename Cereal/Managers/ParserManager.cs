@@ -6,6 +6,8 @@ using System.Linq.Dynamic.Core;
 
 namespace Cereal.Managers
 {
+    // should have an interface, but for the sake of time, skipping it.
+    // should have split this class into smaller classes, but for the sake of time, skipping it.
     public class ParserManager
     {
         CerealContext nutritionContext;
@@ -13,27 +15,24 @@ namespace Cereal.Managers
         {
             nutritionContext = context;
         }
-
-        public void ImagePathSetup() // a few adjustments might be needed, but overall works fine.
-        {
-            string basePath = @"Images/Products";
-            string pics = @"C:/Users/SPAC-O-5/source/repos/Cereal/Cereal/wwwroot/Images/Products/";
-            foreach (var file in Directory.GetFiles(pics))
-            {
-                string picName = Path.GetFileNameWithoutExtension(file);
-                var product = nutritionContext.Nutritions.FirstOrDefault(n => n.Name.ToString() == picName);
-                if (product != null)
-                {
-                    FileInfo fileInfo = new FileInfo(file);
-                    product.ImagePath = $"{basePath}/{product.Name}{fileInfo.Extension}";
-                    nutritionContext.Nutritions.Update(product);
-                }
-            }
-
-            nutritionContext.SaveChanges();
-        }
-
-        // Reads a CSV file and returns a list of string arrays
+        /// <summary>
+        /// Reads nutrition data from a CSV file and adds valid entries to the database.
+        /// </summary>
+        /// <param name="filePath">The full path to the CSV file containing nutrition data.</param>
+        /// <param name="skippedRowIndices">
+        /// An output list of row indices that were skipped due to invalid format or duplication.
+        /// </param>
+        /// <returns>
+        /// A list of <see cref="Nutrition"/> objects that were successfully parsed and added to the database.
+        /// </returns>
+        /// <remarks>
+        /// This method skips the first two header rows, validates each row for correct formatting,
+        /// checks for duplicates, and tracks any skipped rows. After processing, it saves the valid entries
+        /// to the database and sets image paths for each nutrition item.
+        /// </remarks>
+        /// <exception cref="Exception">
+        /// Thrown when the file cannot be read or contains improperly formatted data.
+        /// </exception>
         public List<Nutrition> ReadCsv(string filePath, out List<int> skippedRowIndices)
         {
             skippedRowIndices = new List<int>(); // To track indices of skipped rows.
@@ -75,7 +74,8 @@ namespace Cereal.Managers
                         Shelf = int.Parse(columns[12]),
                         Weight = float.Parse(columns[13]),
                         Cups = float.Parse(columns[14]),
-                        Rating = float.Parse(columns[15])
+                        Rating = float.Parse(columns[15]),
+                        ImagePath = "" // to be set later
                     };
                     bool isDublicate = ParserHelper.CheckForDublicate(nutrition, nutritionContext);
                     if (isDublicate)
@@ -90,6 +90,7 @@ namespace Cereal.Managers
                 }
 
                 nutritionContext.SaveChanges();
+                ImagePathSetup(); // call to set image paths
                 return addedNutritions;
             } catch (IOException ex)
             {
@@ -101,7 +102,6 @@ namespace Cereal.Managers
                 // Handle data format errors
                 throw new Exception("Data format error in the CSV file.", ex);
             }
-
         }
 
         public List<Nutrition> getAllProducts()
@@ -143,6 +143,26 @@ namespace Cereal.Managers
             nutritionContext.Database.ExecuteSqlRaw("Truncate TABLE cereal.nutritions");
             nutritionContext.SaveChanges();
         }
+        /// <summary>
+        /// Updates an existing nutrition product in the database by its ID.
+        /// </summary>
+        /// <param name="id">The ID of the nutrition product to update.</param>
+        /// <param name="updatedNutrition">The updated <see cref="Nutrition"/> object containing new values.</param>
+        /// <param name="typeError">
+        /// An output string indicating the reason for failure, if any. Possible values:
+        /// <list type="bullet">
+        /// <item><c>"not found"</c> – No product with the given ID exists.</item>
+        /// <item><c>"duplicate"</c> – The updated product matches an existing entry.</item>
+        /// <item><c>"invalid"</c> – The updated product contains invalid data.</item>
+        /// </list>
+        /// </param>
+        /// <returns>
+        /// The updated <see cref="Nutrition"/> object if successful; otherwise, <c>null</c>.
+        /// </returns>
+        /// <remarks>
+        /// This method performs validation checks for existence, duplication, and data integrity before updating.
+        /// If any check fails, the update is aborted and an appropriate error message is returned via <c>typeError</c>.
+        /// </remarks>
         public Nutrition UpdateProduct(int id, Nutrition updatedNutrition, out string typeError)
         {
             typeError = "";
@@ -174,7 +194,7 @@ namespace Cereal.Managers
                 updatedNutrition.Weight.ToString(),
                 updatedNutrition.Cups.ToString(),
                 updatedNutrition.Rating.ToString()
-            ])) // temp
+            ]))
             {
                 typeError = "invalid";
                 return null; 
@@ -185,12 +205,61 @@ namespace Cereal.Managers
             return updatedNutrition;
         }
 
-
-        public List<Nutrition> GetFilteredProducts(string category, string value)
+        public List<Nutrition> GetFilteredProducts(string category, string value, string sorting)
         {
-            return nutritionContext.Nutritions
-                .Where($"{category} == @0", value)
-                .ToList();
+            string[] validProperties = new[] { "Name", "Type", "Calories", "Protein", "Fat", "Rating" }; // Add other or maybe all properties.
+            if (!validProperties.Contains(category)) category = "Name";
+
+            IQueryable<Nutrition> query = nutritionContext.Nutritions;
+
+            // Apply filtering only if category and value are provided
+            if (!string.IsNullOrEmpty(category) && !string.IsNullOrEmpty(value))
+            {
+                query = query.Where($"{category} == @0", value);
+            }
+
+            // Apply sorting
+            string sortExpression = "";
+            if (!string.IsNullOrEmpty(sorting)) // validation of sorting parameter
+            {
+                string[] split = sorting.Split('_');
+                if (!validProperties.Contains(split[0])) split[0] = "Name";
+                if (split.Length != 2 || (split[1] != "asc" && split[1] != "desc"))
+                {
+                    split = new[] { "Name", "asc" }; // default sorting
+                }
+                sortExpression = $"{split[0]} {split[1]}";
+                query = query.OrderBy(sortExpression);
+            }
+
+            return query.ToList();
+        }
+
+        /// <summary>
+        /// Assigns image file paths to nutrition products by matching image filenames to product names.
+        /// </summary>
+        /// <remarks>
+        /// This method scans the <c>wwwroot/Images/Products</c> directory for image files and attempts to match each file
+        /// to a nutrition product in the database by normalizing both the product name and the image filename.
+        /// Normalization removes spaces, commas, dots, apostrophes, and applies lowercase conversion to ensure consistent matching.
+        /// If a match is found, the product's <c>ImagePath</c> property is updated accordingly.
+        /// </remarks>
+        public void ImagePathSetup()
+        {
+            string basePath = @"wwwroot/Images/Products";
+            foreach (var file in Directory.GetFiles(basePath))
+            {
+                string picName = Path.GetFileNameWithoutExtension(file);
+                var product = nutritionContext.Nutritions.FirstOrDefault(n => ControllerHelper.NormalizeImagePathString(n.Name) == ControllerHelper.NormalizeImagePathString(picName)); // Need to normalize the product names and image names, so they match. differenses in spaces, commas, dots, apostrophes, and case.
+                if (product != null)
+                {
+                    FileInfo fileInfo = new FileInfo(file); // to get the file extension, including the dot
+                    product.ImagePath = $"{basePath}/{picName}{fileInfo.Extension}";
+                    nutritionContext.Nutritions.Update(product);
+                }
+            }
+
+            nutritionContext.SaveChanges();
         }
     }
 }

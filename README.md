@@ -1,75 +1,115 @@
 # SpecCereal
 
-Et RESTful web API skrevet i C# .NET, der håndterer og parser ernæringsdata om morgenmadsprodukter (cereals). API’et understøtter CRUD-operationer, og alle ikke-GET-kald er beskyttet bag "Authorization"-headeren, hvor gyldige loginoplysninger kræves. Der er også understøttelse for hentning af produktbilleder baseret på produktets ID.
+Et RESTful Web API skrevet i C# .NET 8, der håndterer og parser ernæringsdata for morgenmadsprodukter (cereals). Projektet understøtter CRUD-operationer, simpel filtering og sortering, alle ikke-GET-kald er beskyttet bag "Authorization" headeren, CSV-import, billed hentning og tilbyder en interaktiv Swagger UI til test og dokumentation.
 
-## Funktioner
+## Funktionalitet
 
-- **Ernærings-API**: CRUD-operationer for morgenmadsprodukter med ernæringsoplysninger.
-- **CSV-import**: Upload og parsing af CSV-filer for bulk import af data.
-- **Billedhåndtering**: Tilknytning og udlevering af produktbilleder via API’et.
-- **Brugerautentificering**: Simpel autentificering med BCrypt-hash af adgangskoder.
-- **Rolleadministration**: Brugere har roller (standard: `basic`). Pt. uden funktionalitet.
-- **Swagger UI**: Interaktiv API-dokumentation og test.
+- **CRUD for cereals**: Create, Read, Update og Delete produkter med ernæringsoplysninger.
+- **CSV-import**: Upload og parse CSV-filer for bulk-import af produkter.
+- **Billedhåndtering**: Automatisk tilknytning og udlevering af produktbilleder via produktets ID.
+- **Brugerautentificering**: Basic authentication via header med BCrypt-hash af adgangskoder.
+- **Rolleadministration**: Brugere har roller (standard: `basic`).
+- **Swagger UI**: Interaktiv API-dokumentation og testmiljø.
+- **Filtrering og sortering**: Mulighed for at filtrere og sortere produkter via query parameters.
 
 ## Projektstruktur
 
-- `Cereal/` - ASP.NET Core Web API-projekt (backend)
-- `CerealLib/` - Delt bibliotek med modeller og DTO’er
-- `ConsoleApp1/` - Konsolapplikation til diverse hurtige/midlertidige tests
+- `Cereal/` - ASP.NET Core Web API (backend)
+- `CerealLib/` - Delt bibliotek med modeller og DTOs
+- `ConsoleApp1/` - Konsolapplikation til test og hjælpefunktioner
 
 ## Kom godt i gang
 
 ### Forudsætninger
 
 - [.NET 8 SDK](https://dotnet.microsoft.com/download)
-- MySQL-database (se connectionString i `Cereal/appsettings.json`)
+- MySQL-database (se forbindelsesstreng i `Cereal/appsettings.json`)
 
 ### Opsætning
 
-1. **Klon projektet**
-2. **Konfigurer databasen**  
-   Opdater connectionStringen i `Cereal/appsettings.json`.
-3. **Anvend migrationer**
+1. **Klon repository**
+2. **Konfigurer database**
+   - Opdater forbindelsesstrengen i `Cereal/appsettings.json` hvis nødvendigt.
+3. **Kør migrationer**
 
    **Via terminal:**
    ```sh
-   dotnet ef migrations add [navn på migration, eg. init]
-   ```
-   Hvorefter du skal opdatere databasen med den migration:
-   ```sh
+   cd Cereal
+   dotnet ef migrations add [navn på migration, fx init]
    dotnet ef database update
    ```
 
    **Via EF Core Package Manager Console (PMC) i Visual Studio:**
    ```powershell
-   Add-Migration [navn på migration, eg. init]
-   ```
-   Hvorefter du skal opdatere databasen med den migration:
-   ```powershell
+   Add-Migration [navn på migration, fx init]
    Update-Database
    ```
 
-4. **Start API’et**
+4. **Start API**
    ```sh
-   dotnet run --project Cereal
+   dotnet run
    ```
-   API’et vil være tilgængeligt på [http://localhost:5201/swagger](http://localhost:5201/swagger).
 
 ### Brug af API’et
 
-- **Swagger UI**:  
-  Gå til `/swagger` og brug "Authorize"-knappen for at logge ind.
-- **Autentificering**:  
-  Alle endpoints under `/api/v1/NutritionParser` kræver login.
-- **CSV-upload**:  
-  Brug `/api/v1/NutritionParser/UploadCSV` til at importere produkter fra en CSV-fil.
-- **Oprettelse af enkelt produkt**:  
-  Brug `/api/v1/NutritionParser/UploadProduct` til at oprette et enkelt produkt.
-- **Billedopsætning**:  
-  Kald `/api/Nutrition/setup` én gang for at tilknytte billeder til produkter.
+- **Swagger UI**  
+  Tilgå `/swagger` og brug "Authorize"-knappen for at logge ind.
+- **Authentication**  
+  Alle endpoints under `/api/v1/NutritionParser` kræver login (Basic Auth).
+- **CSV-upload**  
+  POST til `/api/v1/NutritionParser/UploadCSV` med filsti som body for at importere produkter fra CSV.
+- **Opret enkelt produkt**  
+  POST til `/api/v1/NutritionParser/UploadProduct` med produktdata i JSON.
+- **Sletning**  
+  DELETE på `/api/v1/NutritionParser/{id}` for at slette et produkt, eller `/api/v1/NutritionParser/DeleteAll` for at slette alle. Her bliver der kørt "Truncate"
+- **Opdatering**  
+  PUT på `/api/v1/NutritionParser/{id}` med opdaterede data.
+- **Filtrering og sortering**  
+  GET på `/api/Nutrition/products?category=Type&value=C&sorting=Calories_desc` for filtreret/sorteret resultat. Her er query parameterne optional.
+- **Billeder**  
+  GET på `/api/Nutrition/{id}/image` returnerer produktets billede.
+- **Billedopsætning**  
+  Kald `/api/Nutrition/setup` én gang for at matche billeder til produkter. Hvis der er sket en fejl. Hvor Nutrition.ImagePath ikke har noget.
+
+### Responsekoder
+
+Alle endpoints returnerer relevante HTTP-statuskoder, fx:
+- `200 OK` – Succesfuld forespørgsel
+- `201 Created` – Ressource oprettet
+- `204 No Content` – Ingen indhold/slettet
+- `400 Bad Request` – Forkert input
+- `401 Unauthorized` – Manglende/ugyldig login (authorization header)
+- `404 Not Found` – Ressource ikke fundet
+- `409 Conflict` – Konflikt, fx duplikat
+- `500 Internal Server Error` – Serverfejl
 
 ### Noter
 
-- DTO’er bruges til input og visse output; ID’er genereres automatisk af databasen.
+- DTOs bruges til input og nogle output.
+- IDs genereres automatisk i databasen.
 - Adgangskoder hashes sikkert med BCrypt.
-- Produktbilleder placeres i `Cereal/wwwroot/Images/Products/` og navngives efter produktets navn (uden filendelse).
+- Produktbilleder placeres i `wwwroot/Images/Products/` og navngives efter produktets navn.
+- Ville gerne have lavet seeding, så databasen altid har noget, når api'et starter.
+
+## Eksempel på JSON til oprettelse af produkt
+
+```json
+{
+  "name": "Nyt Cereal",
+  "mfr": "K",
+  "type": "C",
+  "calories": 100,
+  "protein": 3,
+  "fat": 1,
+  "sodium": 150,
+  "fiber": 2.5,
+  "carbo": 15.0,
+  "sugars": 5,
+  "potass": 100,
+  "vitamins": 25,
+  "shelf": 2,
+  "weight": 1.0,
+  "cups": 0.75,
+  "rating": 50.0
+}
+```

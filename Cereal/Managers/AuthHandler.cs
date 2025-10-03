@@ -50,7 +50,7 @@ namespace Cereal.Managers
                 return AuthenticateResult.Fail("Invalid Authorization Header");
             }
         }
-        protected override Task HandleChallengeAsync(AuthenticationProperties properties) // Override to customize the login response, for 401 responses
+        protected override Task HandleChallengeAsync(AuthenticationProperties properties) // Override to customize the 401 response code, for swagger
         {
             Response.StatusCode = 401;
             Response.ContentType = "application/json";

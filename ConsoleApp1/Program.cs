@@ -14,6 +14,8 @@ foreach (var line in File.ReadLines(csv))
 
     string[] columns = line.Split(';');
     string csvName = columns[0];
+
+    csvName = csvName.Replace(" ", "").Replace("'", "").Replace(",", "").Replace(".", "").ToLower();
     csvNames.Add(csvName);
 }
 
@@ -24,6 +26,9 @@ foreach (var pic in Directory.GetFiles(pics))
 {
     picId++;
     string picName = Path.GetFileNameWithoutExtension(pic);
+    picName = picName.Trim();
+    picName = picName.ToLower();
+    picName = picName.Replace(" ", "").Replace("'", "").Replace(",", "").Replace(".", "");
     if (csvNames.Contains(picName))
     {
         matchCount++;
@@ -32,6 +37,7 @@ foreach (var pic in Directory.GetFiles(pics))
     else
     {
         noMatchCount++;
+        Console.WriteLine(csvNames[picId -1]);
         Console.WriteLine($"No match: {picName}");
         Console.WriteLine($"Pic id = {picId}\n");
     }
